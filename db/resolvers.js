@@ -1,5 +1,6 @@
 const User = require("../models/user");
 const bcryptjs = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
 const cursos = [
   {
@@ -19,12 +20,15 @@ const cursos = [
 //Resolvers
 const resolvers = {
   Query: {
-    obtenerCurso: (_, { input }, ctx, info) => {
-      console.log("Context: ", ctx);
-      return cursos.find((curso) => curso.tecnologia === input.tecnologia);
+    getUser: (_, { token }, ctx, info) => {
+      try {
+        const user = jwt.verify(token, process.env.JWT_SECRET);
+        console.log(user);
+        return user;
+      } catch (error) {
+        console.log(error);
+      }
     },
-    obtenerCursos: () => cursos,
-    obtenerTecnologias: () => cursos,
   },
   Mutation: {
     newUser: async (_, { input }, ctx, info) => {
@@ -33,6 +37,25 @@ const resolvers = {
         const hashedPassword = await bcryptjs.hash(input.password, salt);
         const user = await User.create({ ...input, password: hashedPassword });
         return user;
+      } catch (error) {
+        console.log(error);
+      }
+    },
+    authUser: async (_, { input: { email, password } }, ctx, info) => {
+      try {
+        const user = await User.findOne({ email });
+        if (!user) throw new Error("Usuario no existe");
+
+        const isValid = await bcryptjs.compare(password, user.password);
+        if (!isValid) throw new Error("Password incorrecto");
+
+        const { name, lastname, id } = user;
+        const token = jwt.sign(
+          { id, name, lastname, email },
+          process.env.JWT_SECRET,
+          { expiresIn: "24h" }
+        );
+        return { token };
       } catch (error) {
         console.log(error);
       }
