@@ -1,6 +1,8 @@
 const User = require("../models/user");
+const Product = require("../models/products");
 const bcryptjs = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { UserInputError } = require("apollo-server-errors");
 
 const cursos = [
   {
@@ -28,6 +30,19 @@ const resolvers = {
       } catch (error) {
         console.log(error);
       }
+    },
+    getProducts: async () => {
+      try {
+        const products = await Product.find();
+        return products;
+      } catch (error) {
+        console.log(error);
+      }
+    },
+    getProduct: async (_, { id }) => {
+      const product = await Product.findById(id);
+      if (!product) throw new UserInputError("Producto no encontrado");
+      return product;
     },
   },
   Mutation: {
@@ -59,6 +74,26 @@ const resolvers = {
       } catch (error) {
         console.log(error);
       }
+    },
+    newProduct: async (_, { input }) => {
+      try {
+        const product = await Product.create(input);
+        return product;
+      } catch (error) {
+        console.log(error);
+      }
+    },
+    updateProduct: async (_, { id, input }) => {
+      const product = await Product.findByIdAndUpdate(id, input, {
+        returnDocument: "after",
+      });
+      if (!product) throw new Error("Producto no encontrado");
+      return product;
+    },
+    deleteProduct: async (_, { id }) => {
+      const product = await Product.findByIdAndRemove(id);
+      if (!product) throw new Error("Producto no eliminado");
+      return "Producto eliminado correctamente";
     },
   },
 };
