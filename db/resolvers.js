@@ -1,3 +1,6 @@
+const User = require("../models/user");
+const bcryptjs = require("bcryptjs");
+
 const cursos = [
   {
     titulo: "Curso profesional de Javascript",
@@ -22,6 +25,18 @@ const resolvers = {
     },
     obtenerCursos: () => cursos,
     obtenerTecnologias: () => cursos,
+  },
+  Mutation: {
+    newUser: async (_, { input }, ctx, info) => {
+      try {
+        const salt = await bcryptjs.genSalt(10);
+        const hashedPassword = await bcryptjs.hash(input.password, salt);
+        const user = await User.create({ ...input, password: hashedPassword });
+        return user;
+      } catch (error) {
+        console.log(error);
+      }
+    },
   },
 };
 
