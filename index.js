@@ -1,4 +1,8 @@
 const { ApolloServer, gql } = require("apollo-server");
+const { verifyToken } = require("./lib/auth");
+
+const User = require("./models/user");
+
 const typeDefs = require("./db/schema");
 const resolvers = require("./db/resolvers");
 
@@ -8,9 +12,14 @@ connectDB();
 const server = new ApolloServer({
   typeDefs,
   resolvers,
-  context: () => {
-    const myContext = "Hola";
-    return { myContext };
+  context: async ({ req }) => {
+    const token = req.headers["authorization"] || "";
+    if (token) {
+      const user = verifyToken(token);
+      if (!user) return null;
+      const userModel = await User.findById(user.id);
+      return { user, userModel };
+    }
   },
 });
 

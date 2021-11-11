@@ -1,31 +1,18 @@
 const User = require("../models/user");
 const Product = require("../models/products");
-const bcryptjs = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const { UserInputError } = require("apollo-server-errors");
+const Client = require("../models/clients");
+const { getToken, verifyToken } = require("../lib/auth");
 
-const cursos = [
-  {
-    titulo: "Curso profesional de Javascript",
-    tecnologia: "Javascript",
-  },
-  {
-    titulo: "Curso practico de react",
-    tecnologia: "React",
-  },
-  {
-    titulo: "Curso Express",
-    tecnologia: "Nodejs",
-  },
-];
+const bcryptjs = require("bcryptjs");
+const { UserInputError } = require("apollo-server-errors");
 
 //Resolvers
 const resolvers = {
   Query: {
     getUser: (_, { token }, ctx, info) => {
       try {
-        const user = jwt.verify(token, process.env.JWT_SECRET);
-        console.log(user);
+        const user = verifyToken(token);
+        if (!user) throw new Error("Error de authenticacion");
         return user;
       } catch (error) {
         console.log(error);
@@ -43,6 +30,36 @@ const resolvers = {
       const product = await Product.findById(id);
       if (!product) throw new UserInputError("Producto no encontrado");
       return product;
+    },
+    getClients: async () => {
+      try {
+        const clients = await Client.find();
+        if (!clients) throw new Error("Clientes no encontrados");
+        return clients;
+      } catch (error) {
+        console.log(error);
+      }
+    },
+    getClientsBySeller: async (_, {}, { user, userModel }) => {
+      await userModel.populate({ path: "clients" });
+      console.log(userModel);
+      try {
+        const client = await Client.find({ sellerId: user.id });
+        if (!client) throw new Error("Clientes no encontrados");
+        return client;
+      } catch (error) {
+        console.log(error);
+      }
+    },
+    getClient: async (_, { id }, { user }) => {
+      try {
+        if (!user) throw new Error("Usuario no authenticado");
+        const client = await Client.find({ _id: id, sellerId: user.id });
+        if (client.length === 0) throw new Error("Cliente no encontrado");
+        return client[0];
+      } catch (error) {
+        console.log(error);
+      }
     },
   },
   Mutation: {
@@ -65,11 +82,7 @@ const resolvers = {
         if (!isValid) throw new Error("Password incorrecto");
 
         const { name, lastname, id } = user;
-        const token = jwt.sign(
-          { id, name, lastname, email },
-          process.env.JWT_SECRET,
-          { expiresIn: "24h" }
-        );
+        const token = getToken({ name, lastname, id });
         return { token };
       } catch (error) {
         console.log(error);
@@ -94,6 +107,38 @@ const resolvers = {
       const product = await Product.findByIdAndRemove(id);
       if (!product) throw new Error("Producto no eliminado");
       return "Producto eliminado correctamente";
+    },
+    newClient: async (_, { input }, { user }, info) => {
+      try {
+        const client = await Client.create({
+          ...input,
+          sellerId: user.id,
+        });
+        return client;
+      } catch (error) {
+        console.log(error);
+        throw new Error("Cliente no registrado");
+      }
+    },
+    updateClient: async (_, { id, input }, { user }) => {
+      if (!user) throw new Error("Usuario no authenticado");
+      const client = await Client.findOneAndUpdate(
+        { _id: id, sellerId: user.id },
+        input,
+        { returnDocument: "after" }
+      );
+
+      if (!client) throw new Error("Cliente no actualizado");
+      return client;
+    },
+    deleteClient: async (_, { id }, { user }) => {
+      if (!user) throw new Error("Usuario no authenticado");
+      const client = await Client.findOneAndRemove({
+        _id: id,
+        sellerId: user.id,
+      });
+      if (!client) throw new Error("Cliente no eliminado");
+      return "Cliente eliminado correctamente";
     },
   },
 };
