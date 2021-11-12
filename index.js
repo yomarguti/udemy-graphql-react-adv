@@ -1,7 +1,5 @@
 const { ApolloServer, gql } = require("apollo-server");
-const { verifyToken } = require("./lib/auth");
-
-const User = require("./models/user");
+const { getUser } = require("./lib/auth");
 
 const typeDefs = require("./db/schema");
 const resolvers = require("./db/resolvers");
@@ -15,10 +13,8 @@ const server = new ApolloServer({
   context: async ({ req }) => {
     const token = req.headers["authorization"] || "";
     if (token) {
-      const user = verifyToken(token);
-      if (!user) return null;
-      const userModel = await User.findById(user.id);
-      return { user, userModel };
+      const user = await getUser(token);
+      return { user };
     }
   },
 });

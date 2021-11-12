@@ -1,7 +1,7 @@
 const User = require("../models/user");
 const Product = require("../models/products");
 const Client = require("../models/clients");
-const { getToken, verifyToken } = require("../lib/auth");
+const { getToken, getUser } = require("../lib/auth");
 
 const bcryptjs = require("bcryptjs");
 const { UserInputError } = require("apollo-server-errors");
@@ -11,7 +11,7 @@ const resolvers = {
   Query: {
     getUser: (_, { token }, ctx, info) => {
       try {
-        const user = verifyToken(token);
+        const user = getUser(token);
         if (!user) throw new Error("Error de authenticacion");
         return user;
       } catch (error) {
@@ -40,21 +40,19 @@ const resolvers = {
         console.log(error);
       }
     },
-    getClientsBySeller: async (_, {}, { user, userModel }) => {
-      await userModel.populate({ path: "clients" });
-      console.log(userModel);
+    getClientsBySeller: async (_, {}, { user }) => {
+      if (!user) throw new Error("Usuario no authenticado");
       try {
-        const client = await Client.find({ sellerId: user.id });
-        if (!client) throw new Error("Clientes no encontrados");
-        return client;
+        await user.populate("clients");
+        return user.clients;
       } catch (error) {
         console.log(error);
       }
     },
     getClient: async (_, { id }, { user }) => {
+      if (!user) throw new Error("Usuario no authenticado");
       try {
-        if (!user) throw new Error("Usuario no authenticado");
-        const client = await Client.find({ _id: id, sellerId: user.id });
+        const client = await Client.find({ _id: id, sellerId: user._id });
         if (client.length === 0) throw new Error("Cliente no encontrado");
         return client[0];
       } catch (error) {
@@ -81,8 +79,8 @@ const resolvers = {
         const isValid = await bcryptjs.compare(password, user.password);
         if (!isValid) throw new Error("Password incorrecto");
 
-        const { name, lastname, id } = user;
-        const token = getToken({ name, lastname, id });
+        const { name, lastname, _id } = user;
+        const token = getToken({ name, lastname, _id });
         return { token };
       } catch (error) {
         console.log(error);
@@ -109,10 +107,11 @@ const resolvers = {
       return "Producto eliminado correctamente";
     },
     newClient: async (_, { input }, { user }, info) => {
+      if (!user) throw new Error("Usuario no authenticado");
       try {
         const client = await Client.create({
           ...input,
-          sellerId: user.id,
+          sellerId: user._id,
         });
         return client;
       } catch (error) {
@@ -123,7 +122,7 @@ const resolvers = {
     updateClient: async (_, { id, input }, { user }) => {
       if (!user) throw new Error("Usuario no authenticado");
       const client = await Client.findOneAndUpdate(
-        { _id: id, sellerId: user.id },
+        { _id: id, sellerId: user._id },
         input,
         { returnDocument: "after" }
       );
@@ -135,7 +134,7 @@ const resolvers = {
       if (!user) throw new Error("Usuario no authenticado");
       const client = await Client.findOneAndRemove({
         _id: id,
-        sellerId: user.id,
+        sellerId: user._id,
       });
       if (!client) throw new Error("Cliente no eliminado");
       return "Cliente eliminado correctamente";
