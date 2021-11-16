@@ -9,7 +9,7 @@ const productSchema = new Schema(
       required: true,
       trim: true,
     },
-    quantity: {
+    stock: {
       type: Number,
       required: true,
       trim: true,
@@ -27,6 +27,8 @@ const productSchema = new Schema(
     },
   }
 );
+
+productSchema.index({ name: "text" });
 
 const Product = mongoose.model("Product", productSchema);
 

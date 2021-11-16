@@ -28,7 +28,7 @@ const typeDefs = gql`
   type Product {
     id: ID
     name: String
-    quantity: Int
+    stock: Int
     price: Float
     createdAt: String
   }
@@ -44,6 +44,29 @@ const typeDefs = gql`
     sellerId: ID
   }
 
+  type Order {
+    id: ID
+    products: [OrderProducts]
+    total: Float
+    client: ID
+    seller: ID
+    createdAt: String
+    status: OrderStatus
+  }
+
+  type OrderProducts {
+    id: ID
+    quantity: Int
+  }
+
+  type TopClients {
+    total: Float
+    client: [Client]
+  }
+  type TopSellers {
+    total: Float
+    seller: [User]
+  }
   input UserInput {
     name: String!
     lastname: String!
@@ -58,7 +81,7 @@ const typeDefs = gql`
 
   input ProductInput {
     name: String!
-    quantity: Int!
+    stock: Int!
     price: Float!
   }
 
@@ -68,6 +91,24 @@ const typeDefs = gql`
     email: String!
     company: String!
     phone: String
+  }
+
+  enum OrderStatus {
+    PENDING
+    COMPLETED
+    CANCELED
+  }
+
+  input OrderProductsInput {
+    id: ID
+    quantity: Int
+  }
+
+  input OrderInput {
+    products: [OrderProductsInput]
+    total: Float!
+    client: ID!
+    status: OrderStatus
   }
 
   type Query {
@@ -82,6 +123,17 @@ const typeDefs = gql`
     getClients: [Client]
     getClientsBySeller: [Client]
     getClient(id: ID): Client
+
+    #Orders
+    getOrders: [Order]
+    getOrdersBySeller: [Order]
+    getOrder(id: ID): Order
+    getOrdersByStatus(status: OrderStatus): [Order]
+
+    #Advanced Searchs
+    getBestClients: [TopClients]
+    getBestSellers: [TopSellers]
+    findProduct(text: String!): [Product]
   }
 
   type Mutation {
@@ -98,6 +150,11 @@ const typeDefs = gql`
     newClient(input: ClientInput): Client
     updateClient(id: ID, input: ClientInput): Client
     deleteClient(id: ID): String
+
+    #Pedidos
+    newOrder(input: OrderInput): Order
+    updateOrder(id: ID, input: OrderInput): Order
+    deleteOrder(id: ID): String
   }
 `;
 

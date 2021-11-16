@@ -1,6 +1,7 @@
 const User = require("../models/user");
 const Product = require("../models/products");
 const Client = require("../models/clients");
+const Order = require("../models/orders");
 const { getToken, getUser } = require("../lib/auth");
 
 const bcryptjs = require("bcryptjs");
@@ -58,6 +59,99 @@ const resolvers = {
       } catch (error) {
         console.log(error);
       }
+    },
+    getOrders: async () => {
+      try {
+        const orders = await Order.find();
+        return orders;
+      } catch (error) {
+        console.log(error);
+      }
+    },
+    getOrdersBySeller: async (_, {}, { user }) => {
+      if (!user) throw new Error("Usuario no authenticado");
+      try {
+        await user.populate("orders");
+        return user.orders;
+      } catch (error) {
+        console.log(error);
+      }
+    },
+    getOrder: async (_, { id }, { user }) => {
+      if (!user) throw new Error("Usuario no authenticado");
+      try {
+        const orders = await Order.find({ _id: id, seller: user._id });
+        if (orders.length === 0) throw new Error("Pedido no encontrado");
+        return orders[0];
+      } catch (error) {
+        console.log(error);
+      }
+    },
+    getOrdersByStatus: async (_, { status }, { user }) => {
+      if (!user) throw new Error("Usuario no authenticado");
+      try {
+        const orders = await Order.find({ status, seller: user._id });
+        return orders;
+      } catch (error) {
+        console.log(error);
+      }
+    },
+    getBestClients: async () => {
+      const clients = await Order.aggregate([
+        { $match: { status: "COMPLETED" } },
+        {
+          $group: {
+            _id: "$client",
+            total: { $sum: "$total" },
+          },
+        },
+        {
+          $lookup: {
+            from: "clients",
+            localField: "_id",
+            foreignField: "_id",
+            as: "client",
+          },
+        },
+        {
+          $sort: {
+            total: -1,
+          },
+        },
+      ]);
+      return clients;
+    },
+    getBestSellers: async () => {
+      const sellers = await Order.aggregate([
+        { $match: { status: "COMPLETED" } },
+        {
+          $group: {
+            _id: "$seller",
+            total: { $sum: "$total" },
+          },
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "_id",
+            foreignField: "_id",
+            as: "seller",
+          },
+        },
+        {
+          $limit: 3,
+        },
+        {
+          $sort: {
+            total: -1,
+          },
+        },
+      ]);
+      return sellers;
+    },
+    findProduct: async (_, { text }) => {
+      const products = await Product.find({ $text: { $search: text } });
+      return products;
     },
   },
   Mutation: {
@@ -139,7 +233,103 @@ const resolvers = {
       if (!client) throw new Error("Cliente no eliminado");
       return "Cliente eliminado correctamente";
     },
+    newOrder: async (_, { input }, { user }) => {
+      if (!user) throw new Error("Usuario no authenticado");
+      try {
+        await user.populate({ path: "clients", match: { _id: input.client } });
+        if (user.clients.length === 0)
+          throw new Error("No tiene acceso al cliente");
+
+        const { error, updatedStock } = await validateStock(input.products);
+        if (error) throw new Error(error);
+
+        const order = await Order.create({
+          ...input,
+          seller: user._id,
+          client: user.clients[0]._id,
+        });
+        if (!order) throw new Error("Orden no fue creada");
+
+        await Promise.all(
+          updatedStock.map((product) => {
+            return Product.findByIdAndUpdate(product.id, {
+              stock: product.stock,
+            });
+          })
+        );
+
+        return order;
+      } catch (error) {
+        console.log(error);
+      }
+    },
+    updateOrder: async (_, { id, input }, { user }) => {
+      if (!user) throw new Error("Usuario no authenticado");
+
+      const order = await Order.find({
+        _id: id,
+        seller: user._id,
+        client: input.client,
+      });
+      if (!order) throw new Error("Orden no existe");
+
+      const { error, updatedStock } = await validateStock(input.products);
+      if (error) throw new Error(error);
+
+      const updatedOrder = await Order.findByIdAndUpdate(id, input, {
+        returnDocument: "after",
+      });
+
+      await Promise.all(
+        updatedStock.map((product) => {
+          return Product.findByIdAndUpdate(product.id, {
+            stock: product.stock,
+          });
+        })
+      );
+
+      return updatedOrder;
+    },
+    deleteOrder: async (_, { id }, { user }) => {
+      if (!user) throw new Error("Usuario no authenticado");
+
+      const order = await Order.findOneAndRemove({ _id: id, seller: user._id });
+      if (!order) throw new Error("Pedido no eliminado");
+      return "Pedido eliminado correctamente";
+    },
   },
+};
+
+const validateStock = async (order) => {
+  const ids = order.map((product) => product.id);
+  const stock = await Product.find({ _id: { $in: ids } });
+
+  const updatedStock = [];
+
+  const isOrderValid = (product) => {
+    const found = order.find((orderProduct) => orderProduct.id == product._id);
+    updatedStock.push({
+      id: product._id,
+      stock: product.stock - found.quantity,
+    });
+    return found.quantity > product.stock;
+  };
+
+  const errorMessage = stock
+    .filter(isOrderValid)
+    .map((product) => `El articulo ${product.name} excede el stock`)
+    .join(", ");
+
+  if (errorMessage === "") {
+    return {
+      error: null,
+      updatedStock,
+    };
+  }
+
+  return {
+    error: errorMessage,
+  };
 };
 
 module.exports = resolvers;

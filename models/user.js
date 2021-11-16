@@ -40,6 +40,12 @@ userSchema.virtual("clients", {
   foreignField: "sellerId",
 });
 
+userSchema.virtual("orders", {
+  ref: "Order",
+  localField: "_id",
+  foreignField: "seller",
+});
+
 const User = mongoose.model("User", userSchema);
 
 module.exports = User;
