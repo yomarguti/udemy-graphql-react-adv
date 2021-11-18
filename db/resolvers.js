@@ -10,14 +10,9 @@ const { UserInputError } = require("apollo-server-errors");
 //Resolvers
 const resolvers = {
   Query: {
-    getUser: (_, { token }, ctx, info) => {
-      try {
-        const user = getUser(token);
-        if (!user) throw new Error("Error de authenticacion");
-        return user;
-      } catch (error) {
-        console.log(error);
-      }
+    getUser: (_, {}, { user }, info) => {
+      if (!user) throw new Error("Usuario no authenticado");
+      return user;
     },
     getProducts: async () => {
       try {
@@ -160,25 +155,22 @@ const resolvers = {
         const salt = await bcryptjs.genSalt(10);
         const hashedPassword = await bcryptjs.hash(input.password, salt);
         const user = await User.create({ ...input, password: hashedPassword });
+        if (!user) throw new Error("Usuario ya existe");
         return user;
       } catch (error) {
-        console.log(error);
+        throw new Error("Usuario ya existe");
       }
     },
     authUser: async (_, { input: { email, password } }, ctx, info) => {
-      try {
-        const user = await User.findOne({ email });
-        if (!user) throw new Error("Usuario no existe");
+      const user = await User.findOne({ email });
+      if (!user) throw new Error("Usuario no existe");
 
-        const isValid = await bcryptjs.compare(password, user.password);
-        if (!isValid) throw new Error("Password incorrecto");
+      const isValid = await bcryptjs.compare(password, user.password);
+      if (!isValid) throw new Error("Password incorrecto");
 
-        const { name, lastname, _id } = user;
-        const token = getToken({ name, lastname, _id });
-        return { token };
-      } catch (error) {
-        console.log(error);
-      }
+      const { name, lastname, _id } = user;
+      const token = getToken({ name, lastname, _id });
+      return { token };
     },
     newProduct: async (_, { input }) => {
       try {
